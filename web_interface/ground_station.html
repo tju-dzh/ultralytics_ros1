@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多相机目标跟踪地面站 - AGX Orin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #00d9ff;
+            text-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #00ff00;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 70px);
+        }
+
+        .camera-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .camera-view {
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            position: relative;
+            transition: transform 0.3s;
+        }
+
+        .camera-view:hover {
+            transform: scale(1.02);
+            border-color: #00d9ff;
+        }
+
+        .camera-header {
+            background: rgba(0, 217, 255, 0.2);
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .camera-title {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .camera-fps {
+            font-size: 12px;
+            color: #00ff00;
+        }
+
+        .camera-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: #000;
+            min-height: 250px;
+        }
+
+        .no-signal {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 250px;
+            color: #888;
+            font-size: 14px;
+        }
+
+        .sidebar {
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            overflow-y: auto;
+        }
+
+        .panel {
+            margin-bottom: 25px;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            color: #00d9ff;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid rgba(0, 217, 255, 0.3);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: rgba(0, 217, 255, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 217, 255, 0.2);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #00d9ff;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .control-input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            border-radius: 5px;
+            color: #fff;
+            font-size: 13px;
+        }
+
+        .control-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%);
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 217, 255, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .detection-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .detection-item {
+            background: rgba(0, 217, 255, 0.1);
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border-left: 3px solid #00d9ff;
+            font-size: 12px;
+        }
+
+        .detection-id {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        .detection-class {
+            color: #ffcc00;
+        }
+
+        .detection-distance {
+            color: #ff6b6b;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 217, 255, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 217, 255, 0.7);
+        }
+
+        .alert {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid #ff6b6b;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .panorama-indicator {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            color: #00d9ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛰️ 多相机目标跟踪地面站 - AGX Orin</h1>
+        <div class="connection-status">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span id="statusText">未连接</span>
+            <button class="btn" style="width: auto; padding: 5px 15px; margin: 0 0 0 15px;" onclick="toggleConnection()">
+                连接/断开
+            </button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="camera-grid">
+            <div class="camera-view">
+                <div class="camera-header">
+                    <span class="camera-title">📷 相机 0 - 前方 (0°-90°)</span>
+                    <span class="camera-fps" id="fps0">0 FPS</span>
+                </div>
+                <img class="camera-image" id="camera0" alt="相机 0">
+                <div class="panorama-indicator">前方视角</div>
+            </div>
+
+            <div class="camera-view">
+                <div class="camera-header">
+                    <span class="camera-title">📷 相机 1 - 右侧 (90°-180°)</span>
+                    <span class="camera-fps" id="fps1">0 FPS</span>
+                </div>
+                <img class="camera-image" id="camera1" alt="相机 1">
+                <div class="panorama-indicator">右侧视角</div>
+            </div>
+
+            <div class="camera-view">
+                <div class="camera-header">
+                    <span class="camera-title">📷 相机 2 - 后方 (180°-270°)</span>
+                    <span class="camera-fps" id="fps2">0 FPS</span>
+                </div>
+                <img class="camera-image" id="camera2" alt="相机 2">
+                <div class="panorama-indicator">后方视角</div>
+            </div>
+
+            <div class="camera-view">
+                <div class="camera-header">
+                    <span class="camera-title">📷 相机 3 - 左侧 (270°-360°)</span>
+                    <span class="camera-fps" id="fps3">0 FPS</span>
+                </div>
+                <img class="camera-image" id="camera3" alt="相机 3">
+                <div class="panorama-indicator">左侧视角</div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <!-- 系统状态 -->
+            <div class="panel">
+                <div class="panel-title">📊 系统状态</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">总检测目标</div>
+                        <div class="stat-value" id="totalDetections">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">跟踪目标</div>
+                        <div class="stat-value" id="totalTracks">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">平均FPS</div>
+                        <div class="stat-value" id="avgFps">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">GPU使用率</div>
+                        <div class="stat-value" id="gpuUsage">0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 检测参数控制 -->
+            <div class="panel">
+                <div class="panel-title">⚙️ 检测参数</div>
+                <div class="control-group">
+                    <label class="control-label">置信度阈值</label>
+                    <input type="range" class="control-input" min="0.1" max="0.9" step="0.05" value="0.3"
+                           id="confThres" onchange="updateParameter('conf_thres', this.value)">
+                    <span style="font-size: 11px; color: #00d9ff;" id="confThresValue">0.30</span>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">IOU阈值</label>
+                    <input type="range" class="control-input" min="0.1" max="0.9" step="0.05" value="0.45"
+                           id="iouThres" onchange="updateParameter('iou_thres', this.value)">
+                    <span style="font-size: 11px; color: #00d9ff;" id="iouThresValue">0.45</span>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">最大检测数</label>
+                    <input type="number" class="control-input" min="10" max="300" value="100"
+                           id="maxDet" onchange="updateParameter('max_det', this.value)">
+                </div>
+                <button class="btn" onclick="applyParameters()">应用参数</button>
+            </div>
+
+            <!-- 当前检测目标 -->
+            <div class="panel">
+                <div class="panel-title">🎯 当前检测目标</div>
+                <div class="detection-list" id="detectionList">
+                    <div style="text-align: center; color: #888; padding: 20px; font-size: 12px;">
+                        等待检测数据...
+                    </div>
+                </div>
+            </div>
+
+            <!-- 警报 -->
+            <div class="panel" id="alertPanel" style="display: none;">
+                <div class="panel-title">⚠️ 警报</div>
+                <div class="alert" id="alertMessage"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    <script>
+        let ros = null;
+        let connected = false;
+        const fpsCounters = [0, 0, 0, 0];
+        const fpsTimestamps = [Date.now(), Date.now(), Date.now(), Date.now()];
+        let allDetections = {};
+
+        // ROS连接配置
+        const ROS_BRIDGE_URL = 'ws://localhost:9090';  // 修改为您的AGX Orin IP地址
+
+        function toggleConnection() {
+            if (connected) {
+                disconnect();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            ros = new ROSLIB.Ros({
+                url: ROS_BRIDGE_URL
+            });
+
+            ros.on('connection', function() {
+                console.log('Connected to ROS bridge');
+                connected = true;
+                updateConnectionStatus(true);
+                subscribeToTopics();
+            });
+
+            ros.on('error', function(error) {
+                console.log('Error connecting to ROS bridge: ', error);
+                updateConnectionStatus(false);
+            });
+
+            ros.on('close', function() {
+                console.log('Connection to ROS bridge closed');
+                connected = false;
+                updateConnectionStatus(false);
+            });
+        }
+
+        function disconnect() {
+            if (ros) {
+                ros.close();
+                connected = false;
+                updateConnectionStatus(false);
+            }
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+
+            if (isConnected) {
+                indicator.classList.add('connected');
+                statusText.textContent = '已连接';
+            } else {
+                indicator.classList.remove('connected');
+                statusText.textContent = '未连接';
+            }
+        }
+
+        function subscribeToTopics() {
+            // 订阅4个相机的图像话题
+            for (let i = 0; i < 4; i++) {
+                const imageTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/yolo_image_camera${i}`,
+                    messageType: 'sensor_msgs/msg/Image'
+                });
+
+                imageTopic.subscribe(function(message) {
+                    updateCameraImage(i, message);
+                    updateFPS(i);
+                });
+
+                // 订阅检测结果
+                const resultTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/yolo_result_camera${i}`,
+                    messageType: 'ultralytics_ros/msg/YoloResult'
+                });
+
+                resultTopic.subscribe(function(message) {
+                    updateDetections(i, message);
+                });
+            }
+        }
+
+        function updateCameraImage(cameraId, message) {
+            // 将ROS图像消息转换为base64并显示
+            const img = document.getElementById(`camera${cameraId}`);
+
+            // 简化版本：直接使用compressed image话题会更高效
+            // 这里假设使用CompressedImage，需要base64编码
+            if (message.data) {
+                // 注意：实际部署时建议使用compressed_image_transport
+                img.src = 'data:image/jpeg;base64,' + message.data;
+            }
+        }
+
+        function updateFPS(cameraId) {
+            const now = Date.now();
+            const elapsed = (now - fpsTimestamps[cameraId]) / 1000;
+
+            fpsCounters[cameraId]++;
+
+            if (elapsed >= 1.0) {
+                const fps = fpsCounters[cameraId] / elapsed;
+                document.getElementById(`fps${cameraId}`).textContent = `${fps.toFixed(1)} FPS`;
+                fpsCounters[cameraId] = 0;
+                fpsTimestamps[cameraId] = now;
+
+                // 更新平均FPS
+                updateAverageFPS();
+            }
+        }
+
+        function updateAverageFPS() {
+            let totalFps = 0;
+            let count = 0;
+
+            for (let i = 0; i < 4; i++) {
+                const fpsText = document.getElementById(`fps${i}`).textContent;
+                const fps = parseFloat(fpsText);
+                if (!isNaN(fps)) {
+                    totalFps += fps;
+                    count++;
+                }
+            }
+
+            if (count > 0) {
+                document.getElementById('avgFps').textContent = (totalFps / count).toFixed(1);
+            }
+        }
+
+        function updateDetections(cameraId, message) {
+            if (message.detections && message.detections.detections) {
+                allDetections[cameraId] = message.detections.detections;
+                renderDetectionList();
+                updateStats();
+            }
+        }
+
+        function renderDetectionList() {
+            const listElement = document.getElementById('detectionList');
+            let html = '';
+            let totalDetections = 0;
+
+            for (let camId = 0; camId < 4; camId++) {
+                if (allDetections[camId] && allDetections[camId].length > 0) {
+                    allDetections[camId].forEach((det, idx) => {
+                        if (det.results && det.results.length > 0) {
+                            const result = det.results[0];
+                            const className = result.hypothesis.class_id || '未知';
+                            const confidence = (result.hypothesis.score * 100).toFixed(1);
+
+                            html += `
+                                <div class="detection-item">
+                                    <span class="detection-id">ID: ${idx + 1}</span> |
+                                    <span class="detection-class">${className}</span>
+                                    (${confidence}%) |
+                                    相机 ${camId}
+                                </div>
+                            `;
+                            totalDetections++;
+                        }
+                    });
+                }
+            }
+
+            if (html === '') {
+                html = '<div style="text-align: center; color: #888; padding: 20px; font-size: 12px;">暂无检测目标</div>';
+            }
+
+            listElement.innerHTML = html;
+            document.getElementById('totalDetections').textContent = totalDetections;
+        }
+
+        function updateStats() {
+            // 更新统计信息
+            let totalTracks = 0;
+            for (let camId = 0; camId < 4; camId++) {
+                if (allDetections[camId]) {
+                    totalTracks += allDetections[camId].length;
+                }
+            }
+            document.getElementById('totalTracks').textContent = totalTracks;
+        }
+
+        function updateParameter(param, value) {
+            // 更新显示值
+            if (param === 'conf_thres') {
+                document.getElementById('confThresValue').textContent = parseFloat(value).toFixed(2);
+            } else if (param === 'iou_thres') {
+                document.getElementById('iouThresValue').textContent = parseFloat(value).toFixed(2);
+            }
+        }
+
+        function applyParameters() {
+            if (!connected) {
+                alert('请先连接到ROS系统！');
+                return;
+            }
+
+            // 通过ROS服务或参数服务器更新参数
+            const confThres = document.getElementById('confThres').value;
+            const iouThres = document.getElementById('iouThres').value;
+            const maxDet = document.getElementById('maxDet').value;
+
+            console.log('Applying parameters:', { confThres, iouThres, maxDet });
+
+            // 这里需要实现参数更新逻辑
+            // 可以通过调用ROS service或发布到参数话题
+
+            showAlert(`参数已应用: 置信度=${confThres}, IOU=${iouThres}, 最大检测数=${maxDet}`);
+        }
+
+        function showAlert(message) {
+            document.getElementById('alertPanel').style.display = 'block';
+            document.getElementById('alertMessage').textContent = message;
+
+            setTimeout(() => {
+                document.getElementById('alertPanel').style.display = 'none';
+            }, 5000);
+        }
+
+        // 自动连接
+        window.onload = function() {
+            setTimeout(connect, 1000);
+        };
+    </script>
+</body>
+</html>

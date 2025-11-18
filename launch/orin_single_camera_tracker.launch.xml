@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NVIDIA AGX Orin Optimized Single Camera Tracker Launch File
+
+  This launch file is optimized for AGX Orin with a single camera.
+  Uses TensorRT-optimized models for maximum performance.
+
+  Usage:
+    ros2 launch ultralytics_ros orin_single_camera_tracker.launch.xml
+-->
+<launch>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="debug" default="false"/>
+
+  <!-- TensorRT optimized model -->
+  <arg name="yolo_model" default="yolov8m_640x640_fp16_batch1.engine"/>
+
+  <!-- Camera topics -->
+  <arg name="input_topic" default="/image_raw"/>
+  <arg name="result_topic" default="/yolo_result"/>
+  <arg name="result_image_topic" default="/yolo_image"/>
+
+  <!-- AGX Orin optimized detection parameters -->
+  <arg name="conf_thres" default="0.3"/>
+  <arg name="iou_thres" default="0.45"/>
+  <arg name="max_det" default="100"/>
+  <arg name="device" default="cuda:0"/>
+
+  <!-- Visualization parameters -->
+  <arg name="result_conf" default="true"/>
+  <arg name="result_line_width" default="2"/>
+  <arg name="result_font_size" default="1"/>
+  <arg name="result_font" default="Arial.ttf"/>
+  <arg name="result_labels" default="true"/>
+  <arg name="result_boxes" default="true"/>
+
+  <!-- BoxMOT parameters optimized for AGX Orin -->
+  <arg name="tracking_method" default="boxmot"/>
+  <arg name="boxmot_tracker" default="deepocsort"/>
+  <arg name="reid_model" default="osnet_x0_25_msmt17.pt"/>
+  <arg name="track_high_thresh" default="0.5"/>
+  <arg name="track_low_thresh" default="0.1"/>
+  <arg name="new_track_thresh" default="0.6"/>
+  <arg name="track_buffer" default="30"/>
+  <arg name="match_thresh" default="0.8"/>
+
+  <set_parameter name="use_sim_time" value="$(var use_sim_time)"/>
+
+  <!-- Single camera tracker node with AGX Orin optimizations -->
+  <node pkg="ultralytics_ros" exec="tracker_node.py" output="screen">
+    <param name="yolo_model" value="$(var yolo_model)"/>
+    <param name="input_topic" value="$(var input_topic)"/>
+    <param name="result_topic" value="$(var result_topic)"/>
+    <param name="result_image_topic" value="$(var result_image_topic)"/>
+    <param name="conf_thres" value="$(var conf_thres)"/>
+    <param name="iou_thres" value="$(var iou_thres)"/>
+    <param name="max_det" value="$(var max_det)"/>
+    <param name="device" value="$(var device)"/>
+
+    <param name="result_conf" value="$(var result_conf)"/>
+    <param name="result_line_width" value="$(var result_line_width)"/>
+    <param name="result_font_size" value="$(var result_font_size)"/>
+    <param name="result_font" value="$(var result_font)"/>
+    <param name="result_labels" value="$(var result_labels)"/>
+    <param name="result_boxes" value="$(var result_boxes)"/>
+
+    <!-- BoxMOT parameters -->
+    <param name="tracking_method" value="$(var tracking_method)"/>
+    <param name="boxmot_tracker" value="$(var boxmot_tracker)"/>
+    <param name="reid_model" value="$(var reid_model)"/>
+    <param name="track_high_thresh" value="$(var track_high_thresh)"/>
+    <param name="track_low_thresh" value="$(var track_low_thresh)"/>
+    <param name="new_track_thresh" value="$(var new_track_thresh)"/>
+    <param name="track_buffer" value="$(var track_buffer)"/>
+    <param name="match_thresh" value="$(var match_thresh)"/>
+
+    <!-- Class filtering (uncomment to detect only specific classes) -->
+    <!--<param name="classes" value="0, 2, 5, 7" value-sep=", "/>-->
+  </node>
+
+  <!-- Debug: visualize results -->
+  <node if="$(var debug)" pkg="image_view" exec="image_view" output="screen">
+    <remap from="image" to="$(var result_image_topic)"/>
+  </node>
+</launch>

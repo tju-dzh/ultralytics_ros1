@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ground Station Launch File for Multi-Camera Tracking System
+
+  This launch file starts:
+  1. Multi-camera tracker with TensorRT optimization
+  2. ROS bridge for web interface communication
+  3. Image transport for compressed images
+  4. Web server for ground station interface
+
+  Usage:
+    ros2 launch ultralytics_ros ground_station.launch.xml
+-->
+<launch>
+  <!-- AGX Orin IP address for remote access -->
+  <arg name="orin_ip" default="0.0.0.0"/>
+  <arg name="rosbridge_port" default="9090"/>
+  <arg name="web_server_port" default="8000"/>
+
+  <!-- TensorRT optimized model -->
+  <arg name="yolo_model" default="yolov8m_1920x1080_fp16_batch1.engine"/>
+
+  <!-- Camera topics -->
+  <arg name="camera0_topic" default="/camera0/image_raw"/>
+  <arg name="camera1_topic" default="/camera1/image_raw"/>
+  <arg name="camera2_topic" default="/camera2/image_raw"/>
+  <arg name="camera3_topic" default="/camera3/image_raw"/>
+
+  <!-- Detection parameters -->
+  <arg name="conf_thres" default="0.3"/>
+  <arg name="device" default="cuda:0"/>
+
+  <!-- BoxMOT tracker -->
+  <arg name="boxmot_tracker" default="deepocsort"/>
+  <arg name="reid_model" default="osnet_x0_25_msmt17.pt"/>
+
+  <!-- Start multi-camera tracker -->
+  <include file="$(find-pkg-share ultralytics_ros)/launch/orin_multi_camera_tracker.launch.xml">
+    <arg name="yolo_model" value="$(var yolo_model)"/>
+    <arg name="camera0_topic" value="$(var camera0_topic)"/>
+    <arg name="camera1_topic" value="$(var camera1_topic)"/>
+    <arg name="camera2_topic" value="$(var camera2_topic)"/>
+    <arg name="camera3_topic" value="$(var camera3_topic)"/>
+    <arg name="conf_thres" value="$(var conf_thres)"/>
+    <arg name="device" value="$(var device)"/>
+    <arg name="boxmot_tracker" value="$(var boxmot_tracker)"/>
+    <arg name="reid_model" value="$(var reid_model)"/>
+  </include>
+
+  <!-- ROS Bridge Server for web interface -->
+  <node pkg="rosbridge_server" exec="rosbridge_websocket" name="rosbridge_websocket" output="screen">
+    <param name="port" value="$(var rosbridge_port)"/>
+    <param name="address" value="$(var orin_ip)"/>
+    <!-- Increase max message size for images -->
+    <param name="max_message_size" value="10000000"/>
+    <param name="fragment_timeout" value="600"/>
+    <param name="delay_between_messages" value="0"/>
+  </node>
+
+  <!-- Image transport republish to compressed format for better network performance -->
+  <node pkg="image_transport" exec="republish" name="republish_camera0"
+        args="raw compressed --ros-args -r in:=/yolo_image_camera0 -r out/compressed:=/yolo_image_camera0/compressed"/>
+  <node pkg="image_transport" exec="republish" name="republish_camera1"
+        args="raw compressed --ros-args -r in:=/yolo_image_camera1 -r out/compressed:=/yolo_image_camera1/compressed"/>
+  <node pkg="image_transport" exec="republish" name="republish_camera2"
+        args="raw compressed --ros-args -r in:=/yolo_image_camera2 -r out/compressed:=/yolo_image_camera2/compressed"/>
+  <node pkg="image_transport" exec="republish" name="republish_camera3"
+        args="raw compressed --ros-args -r in:=/yolo_image_camera3 -r out/compressed:=/yolo_image_camera3/compressed"/>
+
+  <!-- Web server for ground station interface -->
+  <node pkg="ultralytics_ros" exec="web_server.py" name="ground_station_web_server" output="screen">
+    <param name="port" value="$(var web_server_port)"/>
+    <param name="address" value="$(var orin_ip)"/>
+  </node>
+
+  <!-- Info message -->
+  <node pkg="ultralytics_ros" exec="ground_station_info.sh" name="ground_station_info" output="screen"/>
+</launch>

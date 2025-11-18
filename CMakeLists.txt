@@ -65,12 +65,17 @@ install(TARGETS
 install(PROGRAMS
   script/tracker_node.py
   script/multi_camera_tracker_node.py
+  script/convert_to_tensorrt.py
+  script/web_server.py
+  script/optimize_models_for_orin.sh
+  script/ground_station_info.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(DIRECTORY
   launch
   rviz2
+  web_interface
   DESTINATION share/${PROJECT_NAME}
 )
 

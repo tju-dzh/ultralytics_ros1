@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NVIDIA AGX Orin Optimized Multi-Camera Tracker Launch File
+
+  This launch file is optimized for AGX Orin with 4 cameras (1080P, 360° FOV).
+  Uses TensorRT-optimized models for maximum performance.
+
+  Usage:
+    ros2 launch ultralytics_ros orin_multi_camera_tracker.launch.xml
+-->
+<launch>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="debug" default="false"/>
+
+  <!-- TensorRT optimized model for 1080P resolution -->
+  <arg name="yolo_model" default="yolov8m_1920x1080_fp16_batch1.engine"/>
+
+  <!-- Camera configuration for 4-camera 360° system -->
+  <arg name="num_cameras" default="4"/>
+  <arg name="camera0_topic" default="/camera0/image_raw"/>
+  <arg name="camera1_topic" default="/camera1/image_raw"/>
+  <arg name="camera2_topic" default="/camera2/image_raw"/>
+  <arg name="camera3_topic" default="/camera3/image_raw"/>
+
+  <!-- Result topics -->
+  <arg name="result_topic_prefix" default="/yolo_result"/>
+  <arg name="result_image_topic_prefix" default="/yolo_image"/>
+
+  <!-- AGX Orin optimized detection parameters -->
+  <arg name="conf_thres" default="0.3"/>
+  <arg name="iou_thres" default="0.45"/>
+  <arg name="max_det" default="100"/>
+  <arg name="device" default="cuda:0"/>
+
+  <!-- Visualization parameters (optimized for performance) -->
+  <arg name="result_conf" default="true"/>
+  <arg name="result_line_width" default="2"/>
+  <arg name="result_font_size" default="1"/>
+  <arg name="result_font" default="Arial.ttf"/>
+  <arg name="result_labels" default="true"/>
+  <arg name="result_boxes" default="true"/>
+
+  <!-- BoxMOT parameters optimized for AGX Orin -->
+  <arg name="boxmot_tracker" default="deepocsort"/>
+  <arg name="reid_model" default="osnet_x0_25_msmt17.pt"/>
+  <arg name="track_high_thresh" default="0.5"/>
+  <arg name="track_low_thresh" default="0.1"/>
+  <arg name="new_track_thresh" default="0.6"/>
+  <arg name="track_buffer" default="40"/>
+  <arg name="match_thresh" default="0.8"/>
+
+  <!-- Multi-camera synchronization (enable for hardware-synced cameras) -->
+  <arg name="use_time_sync" default="true"/>
+  <arg name="sync_queue_size" default="5"/>
+  <arg name="sync_slop" default="0.05"/>
+
+  <set_parameter name="use_sim_time" value="$(var use_sim_time)"/>
+
+  <!-- Multi-camera tracker node with AGX Orin optimizations -->
+  <node pkg="ultralytics_ros" exec="multi_camera_tracker_node.py" output="screen">
+    <!-- Model and camera configuration -->
+    <param name="yolo_model" value="$(var yolo_model)"/>
+    <param name="num_cameras" value="$(var num_cameras)"/>
+    <param name="input_topics" value="[$(var camera0_topic), $(var camera1_topic), $(var camera2_topic), $(var camera3_topic)]"/>
+
+    <!-- Output topics -->
+    <param name="result_topic_prefix" value="$(var result_topic_prefix)"/>
+    <param name="result_image_topic_prefix" value="$(var result_image_topic_prefix)"/>
+
+    <!-- Detection parameters -->
+    <param name="conf_thres" value="$(var conf_thres)"/>
+    <param name="iou_thres" value="$(var iou_thres)"/>
+    <param name="max_det" value="$(var max_det)"/>
+    <param name="device" value="$(var device)"/>
+
+    <!-- Visualization parameters -->
+    <param name="result_conf" value="$(var result_conf)"/>
+    <param name="result_line_width" value="$(var result_line_width)"/>
+    <param name="result_font_size" value="$(var result_font_size)"/>
+    <param name="result_font" value="$(var result_font)"/>
+    <param name="result_labels" value="$(var result_labels)"/>
+    <param name="result_boxes" value="$(var result_boxes)"/>
+
+    <!-- BoxMOT parameters -->
+    <param name="boxmot_tracker" value="$(var boxmot_tracker)"/>
+    <param name="reid_model" value="$(var reid_model)"/>
+    <param name="track_high_thresh" value="$(var track_high_thresh)"/>
+    <param name="track_low_thresh" value="$(var track_low_thresh)"/>
+    <param name="new_track_thresh" value="$(var new_track_thresh)"/>
+    <param name="track_buffer" value="$(var track_buffer)"/>
+    <param name="match_thresh" value="$(var match_thresh)"/>
+
+    <!-- Synchronization parameters -->
+    <param name="use_time_sync" value="$(var use_time_sync)"/>
+    <param name="sync_queue_size" value="$(var sync_queue_size)"/>
+    <param name="sync_slop" value="$(var sync_slop)"/>
+
+    <!-- Class filtering (uncomment to detect only specific classes) -->
+    <!--<param name="classes" value="0, 1, 2, 3, 5, 7" value-sep=", "/>-->
+    <!-- 0: person, 1: bicycle, 2: car, 3: motorcycle, 5: bus, 7: truck -->
+  </node>
+
+  <!-- Debug: visualize results (disable in production for better performance) -->
+  <group if="$(var debug)">
+    <node pkg="rqt_image_view" exec="rqt_image_view" name="camera0_view" output="screen">
+      <remap from="image" to="$(var result_image_topic_prefix)_camera0"/>
+    </node>
+  </group>
+</launch>
