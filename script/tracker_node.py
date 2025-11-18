@@ -26,6 +26,7 @@ from sensor_msgs.msg import Image
 from ultralytics import YOLO
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 from ultralytics_ros.msg import YoloResult
+from boxmot import BYTETracker, BoTSORT, DeepOCSORT, OCSORT, StrongSORT, HybridSORT
 
 
 class TrackerNode(Node):
@@ -47,6 +48,15 @@ class TrackerNode(Node):
         self.declare_parameter("result_font", "Arial.ttf")
         self.declare_parameter("result_labels", True)
         self.declare_parameter("result_boxes", True)
+        # BoxMOT parameters
+        self.declare_parameter("tracking_method", "ultralytics")  # ultralytics or boxmot
+        self.declare_parameter("boxmot_tracker", "deepocsort")  # bytetrack, botsort, deepocsort, ocsort, strongsort, hybridsort
+        self.declare_parameter("reid_model", "osnet_x0_25_msmt17.pt")  # ReID model for DeepOCSORT/StrongSORT
+        self.declare_parameter("track_high_thresh", 0.5)
+        self.declare_parameter("track_low_thresh", 0.1)
+        self.declare_parameter("new_track_thresh", 0.6)
+        self.declare_parameter("track_buffer", 30)
+        self.declare_parameter("match_thresh", 0.8)
 
         path = get_package_share_directory("ultralytics_ros")
         yolo_model = self.get_parameter("yolo_model").get_parameter_value().string_value
@@ -55,6 +65,15 @@ class TrackerNode(Node):
 
         self.bridge = cv_bridge.CvBridge()
         self.use_segmentation = yolo_model.endswith("-seg.pt")
+
+        # Initialize BoxMOT tracker if needed
+        tracking_method = self.get_parameter("tracking_method").get_parameter_value().string_value
+        self.use_boxmot = tracking_method == "boxmot"
+        self.boxmot_tracker = None
+
+        if self.use_boxmot:
+            self._initialize_boxmot_tracker()
+            self.get_logger().info(f"Initialized BoxMOT tracker: {self.get_parameter('boxmot_tracker').get_parameter_value().string_value}")
 
         input_topic = (
             self.get_parameter("input_topic").get_parameter_value().string_value
@@ -69,6 +88,51 @@ class TrackerNode(Node):
         self.results_pub = self.create_publisher(YoloResult, result_topic, 1)
         self.result_image_pub = self.create_publisher(Image, result_image_topic, 1)
 
+    def _initialize_boxmot_tracker(self):
+        """Initialize BoxMOT tracker based on selected algorithm"""
+        tracker_type = self.get_parameter("boxmot_tracker").get_parameter_value().string_value
+        device = self.get_parameter("device").get_parameter_value().string_value
+        track_high_thresh = self.get_parameter("track_high_thresh").get_parameter_value().double_value
+        track_low_thresh = self.get_parameter("track_low_thresh").get_parameter_value().double_value
+        new_track_thresh = self.get_parameter("new_track_thresh").get_parameter_value().double_value
+        track_buffer = self.get_parameter("track_buffer").get_parameter_value().integer_value
+        match_thresh = self.get_parameter("match_thresh").get_parameter_value().double_value
+
+        tracker_args = {
+            "track_high_thresh": track_high_thresh,
+            "track_low_thresh": track_low_thresh,
+            "new_track_thresh": new_track_thresh,
+            "track_buffer": track_buffer,
+            "match_thresh": match_thresh,
+            "frame_rate": 30,
+        }
+
+        if tracker_type == "bytetrack":
+            self.boxmot_tracker = BYTETracker(**tracker_args)
+        elif tracker_type == "botsort":
+            self.boxmot_tracker = BoTSORT(**tracker_args)
+        elif tracker_type == "deepocsort":
+            reid_model = self.get_parameter("reid_model").get_parameter_value().string_value
+            self.boxmot_tracker = DeepOCSORT(
+                model_weights=reid_model,
+                device=device,
+                **tracker_args
+            )
+        elif tracker_type == "ocsort":
+            self.boxmot_tracker = OCSORT(**tracker_args)
+        elif tracker_type == "strongsort":
+            reid_model = self.get_parameter("reid_model").get_parameter_value().string_value
+            self.boxmot_tracker = StrongSORT(
+                model_weights=reid_model,
+                device=device,
+                **tracker_args
+            )
+        elif tracker_type == "hybridsort":
+            self.boxmot_tracker = HybridSORT(**tracker_args)
+        else:
+            self.get_logger().error(f"Unknown tracker type: {tracker_type}")
+            self.boxmot_tracker = None
+
     def image_callback(self, msg):
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
 
@@ -78,19 +142,46 @@ class TrackerNode(Node):
         classes = (
             self.get_parameter("classes").get_parameter_value().integer_array_value
         )
-        tracker = self.get_parameter("tracker").get_parameter_value().string_value
         device = self.get_parameter("device").get_parameter_value().string_value or None
-        results = self.model.track(
-            source=cv_image,
-            conf=conf_thres,
-            iou=iou_thres,
-            max_det=max_det,
-            classes=classes,
-            tracker=tracker,
-            device=device,
-            verbose=False,
-            retina_masks=True,
-        )
+
+        if self.use_boxmot and self.boxmot_tracker is not None:
+            # Use BoxMOT tracking
+            results = self.model(
+                source=cv_image,
+                conf=conf_thres,
+                iou=iou_thres,
+                max_det=max_det,
+                classes=classes,
+                device=device,
+                verbose=False,
+                retina_masks=True,
+            )
+
+            # Convert YOLO detections to BoxMOT format and apply tracking
+            if results is not None and len(results) > 0 and results[0].boxes is not None:
+                dets = results[0].boxes.data.cpu().numpy()  # x1, y1, x2, y2, conf, cls
+                if len(dets) > 0:
+                    # Apply BoxMOT tracking: dets format should be (x1, y1, x2, y2, conf, cls)
+                    tracks = self.boxmot_tracker.update(dets, cv_image)
+
+                    # Update results with track IDs
+                    if tracks is not None and len(tracks) > 0:
+                        # tracks format: (x1, y1, x2, y2, track_id, conf, cls, ...)
+                        results[0].boxes.id = tracks[:, 4]  # track IDs
+        else:
+            # Use Ultralytics built-in tracking
+            tracker = self.get_parameter("tracker").get_parameter_value().string_value
+            results = self.model.track(
+                source=cv_image,
+                conf=conf_thres,
+                iou=iou_thres,
+                max_det=max_det,
+                classes=classes,
+                tracker=tracker,
+                device=device,
+                verbose=False,
+                retina_masks=True,
+            )
 
         if results is not None:
             yolo_result_msg = YoloResult()
