@@ -64,6 +64,7 @@ install(TARGETS
 
 install(PROGRAMS
   script/tracker_node.py
+  script/multi_camera_tracker_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
