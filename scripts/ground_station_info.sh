@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Display ground station access information
+
+sleep 2
+
+echo ""
+echo "╔════════════════════════════════════════════════════════════════════╗"
+echo "║           Ground Station Started Successfully                     ║"
+echo "╚════════════════════════════════════════════════════════════════════╝"
+echo ""
+echo "🌐 Access the Ground Station web interface:"
+echo ""
+echo "   Local access:"
+echo "   └─ http://localhost:8000/ground_station.html"
+echo ""
+echo "   Remote access (from ground station computer):"
+echo "   └─ http://$(hostname -I | awk '{print $1}'):8000/ground_station.html"
+echo ""
+echo "🔌 ROS Bridge WebSocket:"
+echo "   └─ ws://$(hostname -I | awk '{print $1}'):9090"
+echo ""
+echo "📊 Features:"
+echo "   ✓ Real-time 4-camera panoramic view (360°)"
+echo "   ✓ Object detection and tracking visualization"
+echo "   ✓ FPS monitoring for each camera"
+echo "   ✓ Detection statistics and target list"
+echo "   ✓ Real-time parameter adjustment"
+echo "   ✓ Remote monitoring from ground station"
+echo ""
+echo "⚙️  System Info:"
+echo "   └─ GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'N/A')"
+echo "   └─ CUDA: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null || echo 'N/A')"
+echo ""
+echo "╔════════════════════════════════════════════════════════════════════╗"
+echo "║  Open your web browser and navigate to the URL above              ║"
+echo "╚════════════════════════════════════════════════════════════════════╝"
+echo ""

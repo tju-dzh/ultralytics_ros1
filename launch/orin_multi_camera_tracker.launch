@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!--
+  AGX Orin Optimized Multi-Camera Tracker Launch File for ROS 1 (Noetic)
+  Uses TensorRT-optimized models for maximum performance
+
+  Usage:
+    roslaunch ultralytics_ros orin_multi_camera_tracker.launch
+-->
+<launch>
+  <!-- TensorRT optimized model for 1080P resolution -->
+  <arg name="yolo_model" default="yolov8m_1920x1080_fp16_batch1.engine"/>
+
+  <!-- Camera topics -->
+  <arg name="camera0_topic" default="/camera0/image_raw"/>
+  <arg name="camera1_topic" default="/camera1/image_raw"/>
+  <arg name="camera2_topic" default="/camera2/image_raw"/>
+  <arg name="camera3_topic" default="/camera3/image_raw"/>
+
+  <!-- Detection parameters (optimized for AGX Orin) -->
+  <arg name="conf_thres" default="0.3"/>
+  <arg name="device" default="cuda:0"/>
+
+  <!-- BoxMOT parameters -->
+  <arg name="boxmot_tracker" default="deepocsort"/>
+  <arg name="reid_model" default="osnet_x0_25_msmt17.pt"/>
+
+  <!-- Include the main multi-camera tracker -->
+  <include file="$(find ultralytics_ros)/launch/multi_camera_tracker.launch">
+    <arg name="yolo_model" value="$(arg yolo_model)"/>
+    <arg name="camera0_topic" value="$(arg camera0_topic)"/>
+    <arg name="camera1_topic" value="$(arg camera1_topic)"/>
+    <arg name="camera2_topic" value="$(arg camera2_topic)"/>
+    <arg name="camera3_topic" value="$(arg camera3_topic)"/>
+    <arg name="conf_thres" value="$(arg conf_thres)"/>
+    <arg name="device" value="$(arg device)"/>
+    <arg name="boxmot_tracker" value="$(arg boxmot_tracker)"/>
+    <arg name="reid_model" value="$(arg reid_model)"/>
+  </include>
+</launch>

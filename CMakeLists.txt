@@ -1,82 +1,126 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.0.2)
 project(ultralytics_ros)
-set(CMAKE_CXX_STANDARD 17)
 
-if(NOT DEFINED CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
-  set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
-endif()
+## Compile as C++14
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_python REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclpy REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(vision_msgs REQUIRED)
-find_package(visualization_msgs REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
-find_package(cv_bridge REQUIRED)
-find_package(image_geometry REQUIRED)
-find_package(message_filters REQUIRED)
-find_package(pcl_conversions REQUIRED)
-find_package(pcl_ros REQUIRED)
-find_package(tf2_eigen REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(OpenCV REQUIRED)
-find_package(PCL REQUIRED)
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/YoloResult.msg"
-  DEPENDENCIES
-  sensor_msgs
+## Find catkin macros and libraries
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  rospy
   std_msgs
-  vision_msgs
-)
-
-include_directories(include)
-
-add_executable(tracker_with_cloud_node src/tracker_with_cloud_node.cpp)
-ament_target_dependencies(tracker_with_cloud_node
-  rclcpp
+  sensor_msgs
   geometry_msgs
-  sensor_msgs
-  std_msgs
   vision_msgs
   visualization_msgs
+  message_generation
   cv_bridge
   image_geometry
   message_filters
+  pcl_conversions
   pcl_ros
   tf2_eigen
   tf2_ros
-  OpenCV
-  PCL
 )
 
-rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
-target_link_libraries(tracker_with_cloud_node "${cpp_typesupport_target}")
+find_package(OpenCV REQUIRED)
+find_package(PCL REQUIRED)
 
-install(TARGETS
-  tracker_with_cloud_node
-  DESTINATION lib/${PROJECT_NAME}
+## Generate messages
+add_message_files(
+  FILES
+  YoloResult.msg
 )
 
-install(PROGRAMS
-  script/tracker_node.py
-  script/multi_camera_tracker_node.py
-  script/convert_to_tensorrt.py
-  script/web_server.py
-  script/optimize_models_for_orin.sh
-  script/ground_station_info.sh
-  DESTINATION lib/${PROJECT_NAME}
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  sensor_msgs
+  vision_msgs
 )
 
+###################################
+## catkin specific configuration ##
+###################################
+catkin_package(
+  INCLUDE_DIRS include
+  CATKIN_DEPENDS
+    roscpp
+    rospy
+    std_msgs
+    sensor_msgs
+    geometry_msgs
+    vision_msgs
+    visualization_msgs
+    message_runtime
+    cv_bridge
+    image_geometry
+    message_filters
+    pcl_conversions
+    pcl_ros
+    tf2_eigen
+    tf2_ros
+  DEPENDS
+    OpenCV
+    PCL
+)
+
+###########
+## Build ##
+###########
+
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+)
+
+## Declare a C++ executable: tracker_with_cloud_node
+add_executable(tracker_with_cloud_node
+  src/tracker_with_cloud_node.cpp
+)
+
+add_dependencies(tracker_with_cloud_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(tracker_with_cloud_node
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+#############
+## Install ##
+#############
+
+## Mark executables for installation
+install(TARGETS tracker_with_cloud_node
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+## Mark Python scripts for installation
+catkin_install_python(PROGRAMS
+  scripts/tracker_node_ros1.py
+  scripts/multi_camera_tracker_node_ros1.py
+  scripts/convert_to_tensorrt.py
+  scripts/web_server.py
+  scripts/optimize_models_for_orin.sh
+  scripts/ground_station_info.sh
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+## Mark other files for installation
 install(DIRECTORY
   launch
-  rviz2
+  rviz
   web_interface
-  DESTINATION share/${PROJECT_NAME}
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
-ament_package()
+install(DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)
